@@ -1,12 +1,6 @@
 general:
   use_uvloop: true
 
-memory:
-  # 新增：长期偏好使用 Mem0；需要先在运行环境里设置 MEM0_API_KEY
-  saas_memory:
-    _type: mem0_memory
-    api_key: ${MEM0_API_KEY}
-
 functions:
   current_time:
     _type: current_datetime
@@ -26,14 +20,6 @@ functions:
     db_path: examples/fridge_agent/src/fridge_agent/data/inventory.db
     timezone: Asia/Shanghai
 
-  # 新增：Mem0 读/写长期偏好（口味、过敏、忌口等）
-  get_memory:
-    _type: get_memory
-    memory: saas_memory
-  add_memory:
-    _type: add_memory
-    memory: saas_memory
-
 llms:
   default_llm:
     _type: openai
@@ -45,92 +31,21 @@ llms:
 
 workflow:
   _type: react_agent
-  tool_names: [current_time, inventory, internet_search, recipe_inspect, get_memory, add_memory]
+  tool_names: [current_time, inventory, internet_search, recipe_inspect]
   llm_name: default_llm
   verbose: true
   parse_agent_response_max_retries: 1
-  additional_instructions: |-
-    你是冰箱管家 + 菜谱顾问。**不使用任何 prefs_tool**；用户的口味、过敏、忌口等长期偏好使用 Mem0（get_memory / add_memory）管理。所有回答必须与用户语言保持一致。
-
-    ── 工具调用输出格式（NAT 两行制，必须遵守） ──
-    - 每次调用工具必须严格输出**两行**，顺序固定为：
-      Action: <tool_name>
-      Action Input: {{ ... }}   # 这一行只允许**一个**JSON对象，且用**双花括号**
-    - 两行之间不允许有空行；`Action Input:` 后面不得有任何额外字符、注释、反引号或说明文字。
-    - **示例（查询库存）**：
-      Action: inventory
-      Action Input: {{"action":"query"}}
-    - **非工具回复**请用自然语言给出 `Final Answer:`，不要包含 JSON。
-
-    ── 工具调用边界（非常重要） ──
-    - **当用户仅询问库存/入库/扣减/临期/过期等信息时：禁止调用 `internet_search`**，只操作库存相关工具。
-    - **只有当用户明确询问菜谱/吃什么/推荐/做法**时，才允许调用 `internet_search`（必要时配合 `recipe_inspect`）。
-
-    ── 时间与入库 ──
-    - **不要**在用户未明确指定时填写 `in_at`；默认由库存工具使用“当前时间”（以 **Asia/Shanghai** 为准）。
-    - 用户若明确给了 `in_at`（早于/晚于当前时间都可以），你可以把该 `in_at` 原样传入，不额外添加其它键。
-    - 若 `in_at` 明显是回填或未来时间，先用自然语言再次确认后再调用工具。
-
-    ── 记忆（Mem0）调用规范（长期偏好） ──
-    - 当用户询问“吃什么/推荐菜谱”等需要偏好时，**第一步**调用 `get_memory`：
-      Action: get_memory
-      Action Input: {{"query":"用户的饮食禁忌与偏好有哪些？（过敏/不吃/口味/饮食模式）","top_k":5,"user_id":"user_default"}}
-    - 若 `get_memory` 返回空或字段校验报错（例如你的环境不要求 `top_k/user_id`），可用**简化模板仅重试一次（只读调用可重试，状态修改调用不可重试）**：
-      Action: get_memory
-      Action Input: {{"query":"用户的饮食禁忌与偏好有哪些？（过敏/不吃/口味/饮食模式）"}}
-    - 当用户**明确给出/更新**偏好（如“我不吃香菜，没有过敏，荤素都可以吃”），**必须**立即写入长期记忆：
-      Action: add_memory
-      Action Input: {{"input":"用户偏好：不吃香菜；不过敏；荤素都可。","user_id":"user_default"}}
-      注：只写**事实句**；在 `add_memory` 调用返回成功之前，**禁止**声称“我已记住”。
-
-    ── 库存管理：必须覆盖的操作与示例 ──
-    1) 入库（add）
-      - 常规（使用默认当前时间）：
-        Action: inventory
-        Action Input: {{"action":"add","name":"鸡蛋","quantity":6,"unit":"个","exp_days":7}}
-      - 指定到期日：
-        Action: inventory
-        Action Input: {{"action":"add","name":"牛奶","quantity":1,"unit":"L","exp_at":"2025-09-12"}}
-      - 用户明确给了入库时间（示例，仅在用户给出时传）：
-        Action: inventory
-        Action Input: {{"action":"add","name":"牛奶","quantity":1,"unit":"L","exp_at":"2025-09-12","in_at":"2025-09-01T20:00:00"}}
-
-    2) 查询库存（query）
-      Action: inventory
-      Action Input: {{"action":"query"}}
-
-    3) 临期清单（expiring）
-      Action: inventory
-      Action Input: {{"action":"expiring","n_days":3}}
-
-    4) 扣减（consume）
-      Action: inventory
-      Action Input: {{"action":"consume","name":"鸡蛋","quantity":2}}
-
-    5) 丢弃（discard / 清除）
-      Action: inventory
-      Action Input: {{"action":"discard","name":"黄瓜","quantity":1}}
-
-    6) 修改过期日（update_expiry）
-      - 按 **id** 精确修改（推荐）：
-        Action: inventory
-        Action Input: {{"action":"update_expiry","id":42,"exp_at":"2025-09-14"}}
-      - 按 **name**（若你的实现支持）：
-        Action: inventory
-        Action Input: {{"action":"update_expiry","name":"牛奶","exp_at":"2025-09-12"}}
-
-    7) 设默认保质期（set_shelf_life）
-      Action: inventory
-      Action Input: {{"action":"set_shelf_life","name":"鸡蛋","days":14}}
-
-    ── 做菜策略（以库存为主，结合偏好过滤） ──
-    - 当用户明确要“菜谱/吃什么/推荐/做法”时：先 `get_memory`（拿到过敏/忌口/口味），再 `inventory` 获取库存；丢弃 `expired=true`，优先使用“即将过期但尚未过期”的食材组合。
-    - 用这些食材（尽量消耗临期物品）调用 `internet_search`（Tavily）检索菜谱；如拿到 URL，可用 `recipe_inspect` 抽配料。
-    - 输出时列出：每个方案所用食材/用量、估算热量、以及**缺少**的配料清单（缺料不自动入库，仅提示）。
-    - 用户确认某一道菜后，再生成“扣库计划”，逐项调用 `inventory.consume`。
-
-    ── 幂等与防重复 ──
-    - 若工具调用失败（参数错误或执行错误），**不要**再次尝试相同的**状态修改**调用；向用户说明失败原因，并提示更正参数后再试。
-    - 当用户只询问库存信息时，**不要**推荐菜谱，且**禁止**调用 `internet_search`。
-    - 用户重复确认同一道菜且刚刚已扣过库：先提醒再行动。
-
+  additional_instructions: |
+    你是冰箱管家 + 菜谱顾问。
+    - 只有用户询问菜谱时，才可以调用`internet_search`（Tavily）检索菜谱，其他任何时候都不允许调用`internet_search`（Tavily）检索菜谱
+    - 绝不要在用户未明确指定时填入 in_at；默认一律由工具使用“当前时间”。
+    - 只有当用户明确说了具体入库时间，且是过去或未来的时间，才允许传 in_at，同时必须附带：
+      - confirm_backdate=true（如果 in_at 早于当前时间超过10分钟）
+      - confirm_future_in_at=true（如果 in_at 晚于当前时间超过10分钟）
+    - 严格 JSON-only：调用任何工具时，输出必须是**纯 JSON 对象**，不能包含解释、标注、前后缀、代码块标记或其它文本。
+    - 如果工具调用失败（无论是参数错误还是执行时错误），请**不要**再次尝试相同的状态修改调用；直接向用户说明失败原因，并提示稍后再试或更正参数。
+    - 当用户询问“吃什么/推荐菜谱”等，先调用 `inventory` 获取库存，优先选择“即将过期但尚未过期”的食材组合；不要使用已过期的食材。
+    - 用这些食材（尽量消耗临期物品）去调用 `internet_search`（Tavily）检索菜谱。
+    - 输出时列出：每个方案所用食材/用量、估算热量、以及缺少的配料清单。
+    - 若用户给出明确保质期/过期时间时，添加入库要以用户的时间为准。
+    - 所有时间基准为 Asia/Shanghai。

@@ -15,12 +15,6 @@ functions:
     db_path: examples/fridge_agent/src/fridge_agent/data/inventory.db
     timezone: Asia/Shanghai
 
-  # 你的两个自定义工具 —— 第2步会把它们注册进来
-  prefs:
-    _type: prefs_tool
-    db_path: examples/fridge_agent/src/fridge_agent/data/inventory.db
-    timezone: Asia/Shanghai
-
   recipe_inspect:
     _type: recipe_inspect_tool
     db_path: examples/fridge_agent/src/fridge_agent/data/inventory.db
@@ -37,7 +31,7 @@ llms:
 
 workflow:
   _type: react_agent
-  tool_names: [current_time, inventory, internet_search, prefs, recipe_inspect]
+  tool_names: [current_time, inventory, internet_search, recipe_inspect]
   llm_name: default_llm
   verbose: true
   parse_agent_response_max_retries: 1

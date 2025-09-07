@@ -8,7 +8,7 @@ NEMO_DIR=$(pwd)
 PROJECT_ROOT=$(dirname "$NEMO_DIR")
 
 # 设置环境变量
-source ../mykey.sh
+source ../my_keys.sh
 
 # 激活Python虚拟环境
 source .venv/bin/activate
