@@ -1,0 +1,51 @@
+general:
+  use_uvloop: true
+
+functions:
+  current_time:
+    _type: current_datetime
+
+  # 用官方内置的 Tavily 搜索工具
+  internet_search:
+    _type: tavily_internet_search
+
+  # 你的库存工具（之前已成功识别）
+  inventory:
+    _type: inventory_tool
+    db_path: examples/fridge_agent/src/fridge_agent/data/inventory.db
+    timezone: Asia/Shanghai
+
+  recipe_inspect:
+    _type: recipe_inspect_tool
+    db_path: examples/fridge_agent/src/fridge_agent/data/inventory.db
+    timezone: Asia/Shanghai
+
+llms:
+  default_llm:
+    _type: openai
+    model_name: "qwen-plus-2025-07-28"
+    api_key: ${OPENAI_API_KEY}
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    temperature: 0.7
+    max_tokens: 2048
+
+workflow:
+  _type: react_agent
+  tool_names: [current_time, inventory, internet_search, recipe_inspect]
+  llm_name: default_llm
+  verbose: true
+  parse_agent_response_max_retries: 1
+  additional_instructions: |
+    你是冰箱管家 + 菜谱顾问。
+    - 当用户询问库存信息的时候，绝对不要推荐菜谱。
+    - 绝不要在用户未明确指定时填入 in_at；默认一律由工具使用“当前时间”。
+    - 只有当用户明确说了具体入库时间，且是过去或未来的时间，才允许传 in_at，同时必须附带：
+      - confirm_backdate=true（如果 in_at 早于当前时间超过10分钟）
+      - confirm_future_in_at=true（如果 in_at 晚于当前时间超过10分钟）
+    - 严格 JSON-only：调用任何工具时，输出必须是**纯 JSON 对象**，不能包含解释、标注、前后缀、代码块标记或其它文本。
+    - 如果工具调用失败（无论是参数错误还是执行时错误），请**不要**再次尝试相同的状态修改调用；直接向用户说明失败原因，并提示稍后再试或更正参数。
+    - 当用户询问“吃什么/推荐菜谱”等，先调用 `inventory` 获取库存，优先选择“即将过期但尚未过期”的食材组合；不要使用已过期的食材。
+    - 用这些食材（尽量消耗临期物品）去调用 `internet_search`（Tavily）检索菜谱。
+    - 输出时列出：每个方案所用食材/用量、估算热量、以及缺少的配料清单。
+    - 若用户给出明确保质期/过期时间时，添加入库要以用户的时间为准。
+    - 所有时间基准为 Asia/Shanghai。

@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Tavily搜索配置文件
+# 使用官方NeMo Agent Toolkit架构和现有的Tavily工具
+
+general:
+  use_uvloop: true
+
+functions:
+  tavily_search:
+    _type: tavily_internet_search
+    description: "Search the web using Tavily API for real-time information"
+  
+  current_datetime:
+    _type: current_datetime
+    description: "Get the current date and time"
+
+llms:
+  # 使用用户提供的ModelScope API
+  modelscope_llm:
+    _type: openai
+    model_name: "Qwen/Qwen3-235B-A22B-Thinking-2507"
+    api_key: "ms-89f5403e-c244-4c01-ba7e-5202eebc096a"
+    base_url: "https://api-inference.modelscope.cn/v1"
+    temperature: 0.7
+    max_tokens: 2048
+
+workflow:
+  _type: react_agent
+  tool_names:
+    - tavily_search
+    - current_datetime
+  llm_name: modelscope_llm
+  verbose: true
+  parse_agent_response_max_retries: 3
+  max_iterations: 10
+
