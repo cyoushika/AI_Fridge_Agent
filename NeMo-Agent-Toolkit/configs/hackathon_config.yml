@@ -18,7 +18,7 @@ llms:
   default_llm:
     _type: openai
     model_name: "qwen-flash"
-    api_key: "sk-c81b6edd214546028d682dabdd640d9e"
+    api_key: ${OPENAI_API_KEY}
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
     temperature: 0.7
     max_tokens: 2048
